@@ -1,0 +1,32 @@
+{
+  "name": "tank-rtc-sdk",
+  "version": "1.0.0",
+  "description": "JavaScript SDK for Tank RTC spatial audio and video server",
+  "main": "dist/tank-rtc-sdk.umd.js",
+  "module": "dist/tank-rtc-sdk.esm.js",
+  "types": "dist/tank-rtc-sdk.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "webrtc",
+    "spatial-audio",
+    "video",
+    "realtime",
+    "communication"
+  ],
+  "author": "Tank RTC Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "rollup": "^3.20.0",
+    "@rollup/plugin-terser": "^0.4.0"
+  }
+}

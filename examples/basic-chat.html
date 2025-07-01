@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tank RTC - Basic Chat Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 5px;
+        }
+        .controls button {
+            margin: 5px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .controls button.connected {
+            background: #4CAF50;
+            color: white;
+        }
+        .controls button.disconnected {
+            background: #f44336;
+            color: white;
+        }
+        .controls button.neutral {
+            background: #2196F3;
+            color: white;
+        }
+        .position-controls {
+            margin: 10px 0;
+        }
+        .position-controls input {
+            width: 80px;
+            margin: 0 5px;
+        }
+        .videos {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .video-item {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            text-align: center;
+        }
+        .video-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 3px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.error {
+            background: #fff3cd;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tank RTC - Basic Chat Example</h1>
+
+    <div class="controls">
+        <button id="connectBtn" class="neutral">Connect</button>
+        <button id="disconnectBtn" class="neutral" disabled>Disconnect</button>
+
+        <div style="margin-top: 15px;">
+            <button id="sendAudioBtn" class="neutral" disabled>Start Sending Audio</button>
+            <button id="stopAudioBtn" class="neutral" disabled>Stop Sending Audio</button>
+            <button id="listenAudioBtn" class="neutral" disabled>Start Listening Audio</button>
+            <button id="stopListenBtn" class="neutral" disabled>Stop Listening Audio</button>
+        </div>
+
+        <div style="margin-top: 15px;">
+            <button id="sendVideoBtn" class="neutral" disabled>Start Sending Video</button>
+            <button id="stopVideoBtn" class="neutral" disabled>Stop Sending Video</button>
+            <button id="viewVideoBtn" class="neutral" disabled>Start Viewing Video</button>
+            <button id="stopViewBtn" class="neutral" disabled>Stop Viewing Video</button>
+        </div>
+
+        <div class="position-controls">
+            <label>X: <input type="number" id="xPos" value="0" step="1"></label>
+            <label>Z: <input type="number" id="zPos" value="0" step="1"></label>
+            <button id="updatePosBtn" class="neutral" disabled>Update Position</button>
+        </div>
+    </div>
+
+    <div id="status" class="status disconnected">Disconnected</div>
+
+    <div id="videos" class="videos"></div>
+
+    <!-- Include the SDK -->
+    <script src="../dist/tank-rtc-sdk.umd.dev.js"></script>
+
+    <script>
+        // Create TankRTC instance
+        const tankRTC = new TankRTC({
+            serverUrl: 'ws://localhost:9090',
+            videoFrameRate: 30,
+            videoWidth: 64,
+            videoHeight: 64,
+            videoQuality: 0.8,
+            audioVolume: 1.0,
+            positionUpdateInterval: 1000,
+            maxHearingRange: 50.0
+        });
+
+        // DOM elements
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const sendAudioBtn = document.getElementById('sendAudioBtn');
+        const stopAudioBtn = document.getElementById('stopAudioBtn');
+        const listenAudioBtn = document.getElementById('listenAudioBtn');
+        const stopListenBtn = document.getElementById('stopListenBtn');
+        const sendVideoBtn = document.getElementById('sendVideoBtn');
+        const stopVideoBtn = document.getElementById('stopVideoBtn');
+        const viewVideoBtn = document.getElementById('viewVideoBtn');
+        const stopViewBtn = document.getElementById('stopViewBtn');
+        const updatePosBtn = document.getElementById('updatePosBtn');
+        const statusDiv = document.getElementById('status');
+        const videosDiv = document.getElementById('videos');
+        const xPosInput = document.getElementById('xPos');
+        const zPosInput = document.getElementById('zPos');
+
+        // Event handlers
+        tankRTC.on('onConnect', () => {
+            updateStatus('Connected to Tank RTC server', 'connected');
+            updateButtons(true);
+        });
+
+        tankRTC.on('onDisconnect', () => {
+            updateStatus('Disconnected from server', 'disconnected');
+            updateButtons(false);
+            clearVideos();
+        });
+
+        tankRTC.on('onVideoSourceAdd', (clientId, url) => {
+            console.log('Video source entered range:', clientId);
+            addVideoElement(clientId, url);
+        });
+
+        tankRTC.on('onVideoSourceRemove', (clientId) => {
+            console.log('Video source left range:', clientId);
+            removeVideoElement(clientId);
+        });
+
+        tankRTC.on('onVideoFrameUpdate', (clientId, url) => {
+            // Update existing video element's src to animate the image
+            const img = document.getElementById(`video-${clientId}`);
+            if (img) {
+                img.src = url;
+            }
+        });
+
+        tankRTC.on('onAudioStateChange', (type, isActive) => {
+            console.log(`Audio ${type}: ${isActive ? 'started' : 'stopped'}`);
+        });
+
+        tankRTC.on('onVideoStateChange', (type, isActive) => {
+            console.log(`Video ${type}: ${isActive ? 'started' : 'stopped'}`);
+        });
+
+        tankRTC.on('onError', (message, error) => {
+            console.error('TankRTC Error:', message, error);
+            updateStatus(`Error: ${message}`, 'error');
+        });
+
+        // Button event handlers
+        connectBtn.onclick = async () => {
+            try {
+                updateStatus('Connecting...', 'error');
+                await tankRTC.connect();
+            } catch (error) {
+                updateStatus(`Connection failed: ${error.message}`, 'error');
+            }
+        };
+
+        disconnectBtn.onclick = () => {
+            tankRTC.disconnect();
+        };
+
+        sendAudioBtn.onclick = async () => {
+            try {
+                await tankRTC.startSendingAudio();
+                sendAudioBtn.disabled = true;
+                stopAudioBtn.disabled = false;
+            } catch (error) {
+                updateStatus(`Failed to start sending audio: ${error.message}`, 'error');
+            }
+        };
+
+        stopAudioBtn.onclick = () => {
+            tankRTC.stopSendingAudio();
+            sendAudioBtn.disabled = false;
+            stopAudioBtn.disabled = true;
+        };
+
+        listenAudioBtn.onclick = async () => {
+            try {
+                await tankRTC.startListeningAudio();
+                listenAudioBtn.disabled = true;
+                stopListenBtn.disabled = false;
+            } catch (error) {
+                updateStatus(`Failed to start listening audio: ${error.message}`, 'error');
+            }
+        };
+
+        stopListenBtn.onclick = () => {
+            tankRTC.stopListeningAudio();
+            listenAudioBtn.disabled = false;
+            stopListenBtn.disabled = true;
+        };
+
+        sendVideoBtn.onclick = async () => {
+            try {
+                await tankRTC.startSendingVideo();
+                sendVideoBtn.disabled = true;
+                stopVideoBtn.disabled = false;
+            } catch (error) {
+                updateStatus(`Failed to start sending video: ${error.message}`, 'error');
+            }
+        };
+
+        stopVideoBtn.onclick = () => {
+            tankRTC.stopSendingVideo();
+            sendVideoBtn.disabled = false;
+            stopVideoBtn.disabled = true;
+        };
+
+        viewVideoBtn.onclick = async () => {
+            try {
+                await tankRTC.startViewingVideo();
+                viewVideoBtn.disabled = true;
+                stopViewBtn.disabled = false;
+            } catch (error) {
+                updateStatus(`Failed to start viewing video: ${error.message}`, 'error');
+            }
+        };
+
+        stopViewBtn.onclick = () => {
+            tankRTC.stopViewingVideo();
+            viewVideoBtn.disabled = false;
+            stopViewBtn.disabled = true;
+        };
+
+        updatePosBtn.onclick = () => {
+            const x = parseFloat(xPosInput.value);
+            const z = parseFloat(zPosInput.value);
+            tankRTC.setPosition(x, z);
+            tankRTC.updatePosition();
+        };
+
+        // Helper functions
+        function updateStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function updateButtons(connected) {
+            connectBtn.disabled = connected;
+            disconnectBtn.disabled = !connected;
+            sendAudioBtn.disabled = !connected;
+            listenAudioBtn.disabled = !connected;
+            sendVideoBtn.disabled = !connected;
+            viewVideoBtn.disabled = !connected;
+            updatePosBtn.disabled = !connected;
+        }
+
+        function addVideoElement(clientId, url) {
+            const videoItem = document.createElement('div');
+            videoItem.className = 'video-item';
+            videoItem.id = `video-item-${clientId}`;
+
+            const img = document.createElement('img');
+            img.alt = `Video from ${clientId}`;
+            img.id = `video-${clientId}`;
+            img.src = url;
+
+            const label = document.createElement('div');
+            label.textContent = `Client: ${clientId}`;
+            label.style.marginTop = '5px';
+            label.style.fontSize = '12px';
+            label.style.color = '#666';
+
+            videoItem.appendChild(img);
+            videoItem.appendChild(label);
+            videosDiv.appendChild(videoItem);
+        }
+
+        function removeVideoElement(clientId) {
+            const videoItem = document.getElementById(`video-item-${clientId}`);
+            if (videoItem) {
+                videoItem.remove();
+            }
+        }
+
+        function clearVideos() {
+            videosDiv.innerHTML = '';
+        }
+
+        // Auto-update position when inputs change
+        xPosInput.onchange = updatePosBtn.onclick;
+        zPosInput.onchange = updatePosBtn.onclick;
+    </script>
+</body>
+</html>
