@@ -16,8 +16,6 @@ export interface TankRTCConfig {
   videoQuality?: number;
   /** Audio volume (0.0-1.0) */
   audioVolume?: number;
-  /** Position update frequency in milliseconds */
-  positionUpdateInterval?: number;
   /** Maximum hearing/viewing range */
   maxHearingRange?: number;
   /** WebRTC ICE servers */
@@ -37,8 +35,6 @@ export interface TankRTCConnectionState {
   isViewingVideo: boolean;
   /** Client ID */
   clientId: string;
-  /** Current position */
-  position: { x: number; z: number };
 }
 
 export type TankRTCEvent =
@@ -79,16 +75,6 @@ export declare class TankRTC {
    * Get current connection state
    */
   getConnectionState(): TankRTCConnectionState;
-
-  /**
-   * Set client position in 2D space
-   */
-  setPosition(x: number, z: number): void;
-
-  /**
-   * Manually update position on server
-   */
-  updatePosition(): Promise<void>;
 
   /**
    * Bind audio element for receiving mixed audio

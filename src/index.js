@@ -11,7 +11,6 @@ const DEFAULT_CONFIG = {
   videoHeight: 64,
   videoQuality: 0.8,
   audioVolume: 1.0,
-  positionUpdateInterval: 1000,
   maxHearingRange: 50.0,
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' }
@@ -23,10 +22,9 @@ const DEFAULT_CONFIG = {
  * Tank RTC SDK Class
  */
 class TankRTC {
-  constructor(config = {}) {
+  constructor(clientId, config = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.clientId = null;
-    this.position = { x: 0, z: 0 };
+    this.clientId = clientId;
 
     // Connection state
     this.isConnected = false;
@@ -78,9 +76,6 @@ class TankRTC {
       onError: null
     };
 
-    // Generate client ID
-    this.clientId = this.generateClientId();
-
     this.log('TankRTC SDK initialized', {
       clientId: this.clientId,
       config: this.config,
@@ -116,15 +111,6 @@ class TankRTC {
   }
 
   /**
-   * Generate a unique client ID
-   */
-  generateClientId() {
-    const id = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    this.log('Generated client ID', { clientId: id });
-    return id;
-  }
-
-  /**
    * Set callback handlers
    */
   on(event, callback) {
@@ -145,9 +131,6 @@ class TankRTC {
     try {
       // Don't establish WebSocket connections initially (following index.html pattern)
       // Connections will be established when needed for audio/video operations
-
-      // Update position to ensure client is added to mixer (following index.html pattern)
-      await this.updatePosition();
 
       this.isConnected = true;
       this.log('Successfully connected to server');
@@ -219,9 +202,8 @@ class TankRTC {
 
       // Set up data channel event handlers
       dataChannel.onopen = () => {
-        console.log('Video data channel opened!');
+        console.log('👉 Video data channel opened!');
         this.videoDataChannel = dataChannel;
-        this.setupVideoDataChannel();
       };
 
       dataChannel.onclose = () => {
@@ -231,6 +213,49 @@ class TankRTC {
 
       dataChannel.onerror = (error) => {
         console.error('Video data channel error:', error);
+      };
+
+      dataChannel.onmessage = (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          console.log("data-0");
+          this.handleIncomingVideoMessage(event.data);
+        } else if (event.data instanceof Blob) {
+          console.log("data-1");
+          // Firefox sends Blob, convert to ArrayBuffer
+          const reader = new FileReader();
+          reader.onload = () => {
+            this.handleIncomingVideoMessage(reader.result);
+          };
+          reader.onerror = (error) => {
+            this.logError('Error converting Blob to ArrayBuffer', error);
+          };
+          reader.readAsArrayBuffer(event.data);
+        } else if (typeof event.data === 'string') {
+          // Handle text messages (video-add, video-remove)
+          try {
+            const message = JSON.parse(event.data);
+            switch (message.type) {
+              case 'video-add':
+                this.log('😊 Video source entered range', { clientId: message.clientId });
+                // The video will appear in the next frame update
+                break;
+              case 'video-remove':
+                this.log('😩 Video source left range', { clientId: message.clientId });
+                // Remove the video from display immediately
+                const videoData = this.receivedVideos.get(message.clientId);
+                if (videoData) {
+                  URL.revokeObjectURL(videoData.url);
+                }
+                this.receivedVideos.delete(message.clientId);
+                this.callbacks.onVideoSourceRemove?.(message.clientId);
+                break;
+              default:
+                this.log('Unknown text message', { message });
+            }
+          } catch (error) {
+            this.logError('Error parsing text message', error);
+          }
+        }
       };
 
       const offer = await this.videoPeerConnection.createOffer();
@@ -298,57 +323,6 @@ class TankRTC {
   }
 
   /**
-   * Set position coordinates
-   */
-  setPosition(x, z) {
-    this.position = { x, z };
-    this.log('Position set', this.position);
-  }
-
-  /**
-   * Update position on server
-   */
-  async updatePosition() {
-    this.log('updatePosition called', {
-      isConnected: this.isConnected,
-      position: this.position,
-      clientId: this.clientId
-    });
-
-    if (!this.isConnected) {
-      this.log('Cannot update position - not connected');
-      return;
-    }
-
-    try {
-      const url = `${this.config.serverUrl.replace('ws://', 'http://').replace('wss://', 'https://')}/update-position?client_id=${encodeURIComponent(this.clientId)}`;
-      const body = JSON.stringify({
-        x: this.position.x,
-        z: this.position.z
-      });
-
-      this.log('Sending position update', { url, body });
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: body
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const responseData = await response.json();
-      this.log('Position updated successfully', responseData);
-    } catch (error) {
-      this.handleError('Failed to update position', error);
-    }
-  }
-
-  /**
    * Start sending audio
    */
   async startSendingAudio() {
@@ -363,9 +337,6 @@ class TankRTC {
     }
 
     try {
-      // Ensure client is in mixer before starting audio (following index.html pattern)
-      await this.updatePosition();
-
       this.log('Requesting microphone access');
       this.localStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -454,9 +425,6 @@ class TankRTC {
     }
 
     try {
-      // Ensure client is in mixer before starting audio (following index.html pattern)
-      await this.updatePosition();
-
       if (this.isSafari) {
         this.log('Initializing Safari audio context');
         await this.initializeSafariAudioContext();
@@ -879,70 +847,6 @@ class TankRTC {
       default:
         console.log('Unknown video message type:', message.type);
     }
-  }
-
-  /**
-   * Setup video data channel handlers
-   */
-  setupVideoDataChannel() {
-    if (!this.videoDataChannel) return;
-
-    this.videoDataChannel.onopen = () => {
-      this.log('Video data channel opened');
-      if (this.isViewingVideo) {
-        this.log('Video viewing ready');
-      }
-    };
-
-    this.videoDataChannel.onmessage = (event) => {
-      if (event.data instanceof ArrayBuffer) {
-        this.handleIncomingVideoMessage(event.data);
-      } else if (event.data instanceof Blob) {
-        // Firefox sends Blob, convert to ArrayBuffer
-        const reader = new FileReader();
-        reader.onload = () => {
-          this.handleIncomingVideoMessage(reader.result);
-        };
-        reader.onerror = (error) => {
-          this.logError('Error converting Blob to ArrayBuffer', error);
-        };
-        reader.readAsArrayBuffer(event.data);
-      } else if (typeof event.data === 'string') {
-        // Handle text messages (video-add, video-remove)
-        try {
-          const message = JSON.parse(event.data);
-          switch (message.type) {
-            case 'video-add':
-              this.log('Video source entered range', { clientId: message.clientId });
-              // The video will appear in the next frame update
-              break;
-            case 'video-remove':
-              this.log('Video source left range', { clientId: message.clientId });
-              // Remove the video from display immediately
-              const videoData = this.receivedVideos.get(message.clientId);
-              if (videoData) {
-                URL.revokeObjectURL(videoData.url);
-                this.receivedVideos.delete(message.clientId);
-                this.callbacks.onVideoSourceRemove?.(message.clientId);
-              }
-              break;
-            default:
-              this.log('Unknown text message', { message });
-          }
-        } catch (error) {
-          this.logError('Error parsing text message', error);
-        }
-      }
-    };
-
-    this.videoDataChannel.onclose = () => {
-      this.log('Video data channel closed');
-      this.videoDataChannel = null;
-    };
-
-    this.videoDataChannel.onerror = (error) => {
-      this.handleError('Video data channel error', error);
-    };
   }
 
   /**
@@ -1563,8 +1467,7 @@ class TankRTC {
       isListeningAudio: this.isListeningAudio,
       isSendingVideo: this.isSendingVideo,
       isViewingVideo: this.isViewingVideo,
-      clientId: this.clientId,
-      position: this.position
+      clientId: this.clientId
     };
     this.log('Getting connection state', state);
     return state;
@@ -1792,11 +1695,10 @@ class TankRTC {
     this.audioPeerConnection.oniceconnectionstatechange = () => {
       if (this.audioPeerConnection.iceConnectionState === 'connected' || this.audioPeerConnection.iceConnectionState === 'completed') {
         this.isConnected = true;
-        console.log('🟢 Connected');
+        console.log('🟢 Audio Connected');
       } else if (this.audioPeerConnection.iceConnectionState === 'failed') {
-        console.error('ICE connection failed!');
         this.isConnected = false;
-        console.log('🔴 Connection failed');
+        console.error('🔴 Audio ICE connection failed');
       }
     };
 
@@ -1806,7 +1708,7 @@ class TankRTC {
         console.log('WebRTC connection established!');
       } else if (this.audioPeerConnection.connectionState === 'failed' || this.audioPeerConnection.connectionState === 'disconnected') {
         this.isConnected = false;
-        console.log('🔴 Connection failed');
+        console.error('🔴 Audio connection failed');
       }
     };
 

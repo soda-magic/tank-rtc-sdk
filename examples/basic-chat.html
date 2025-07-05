@@ -117,8 +117,9 @@
     <script src="../dist/tank-rtc-sdk.umd.dev.js"></script>
 
     <script>
+        const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         // Create TankRTC instance
-        const tankRTC = new TankRTC({
+        const tankRTC = new TankRTC(clientId, {
             serverUrl: 'ws://localhost:9090',
             videoFrameRate: 30,
             videoWidth: 64,
@@ -270,8 +271,20 @@
         updatePosBtn.onclick = () => {
             const x = parseFloat(xPosInput.value);
             const z = parseFloat(zPosInput.value);
-            tankRTC.setPosition(x, z);
-            tankRTC.updatePosition();
+
+            const url = `http://localhost:9090/update-position?client_id=${tankRTC.clientId}`;
+            const body = JSON.stringify({
+                x: x,
+                z: z
+            });
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: body
+            });
         };
 
         // Helper functions

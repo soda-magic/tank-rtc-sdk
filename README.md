@@ -86,9 +86,6 @@ tankRTC.on('onVideoSourceRemove', (clientId) => {
 // Connect to server
 await tankRTC.connect();
 
-// Set position
-tankRTC.setPosition(10, 20);
-
 // Start audio/video
 await tankRTC.startSendingAudio();
 await tankRTC.startListeningAudio();
@@ -112,8 +109,7 @@ const config = {
   // Audio settings
   audioVolume: 1.0,                           // Audio volume (0.0-1.0)
 
-  // Position and range
-  positionUpdateInterval: 1000,               // Position update frequency (ms)
+  // Range
   maxHearingRange: 50.0,                      // Maximum hearing/viewing range
 
   // WebRTC settings
@@ -145,11 +141,6 @@ Creates a new TankRTC instance with the specified configuration.
 - `connect()` - Connect to the Tank RTC server (establishes WebSocket connections only)
 - `disconnect()` - Disconnect from the server
 - `getConnectionState()` - Get current connection state
-
-#### Position
-
-- `setPosition(x, z)` - Set client position in 2D space
-- `updatePosition()` - Manually update position on server
 
 #### Audio
 
@@ -199,12 +190,6 @@ Creates a new TankRTC instance with the specified configuration.
         <button id="viewVideo">View Video</button>
     </div>
 
-    <div>
-        <label>X: <input type="number" id="xPos" value="0"></label>
-        <label>Z: <input type="number" id="zPos" value="0"></label>
-        <button id="updatePos">Update Position</button>
-    </div>
-
     <div id="videos"></div>
     <audio id="remoteAudio" autoplay></audio>
 
@@ -239,11 +224,6 @@ Creates a new TankRTC instance with the specified configuration.
         document.getElementById('listenAudio').onclick = () => tankRTC.startListeningAudio();
         document.getElementById('sendVideo').onclick = () => tankRTC.startSendingVideo();
         document.getElementById('viewVideo').onclick = () => tankRTC.startViewingVideo();
-        document.getElementById('updatePos').onclick = () => {
-            const x = parseFloat(document.getElementById('xPos').value);
-            const z = parseFloat(document.getElementById('zPos').value);
-            tankRTC.setPosition(x, z);
-        };
     </script>
 </body>
 </html>

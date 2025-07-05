@@ -10,7 +10,6 @@ function TankRTCComponent() {
   const audioRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
   const [videos, setVideos] = useState({});
-  const [position, setPosition] = useState({ x: 0, z: 0 });
   const [status, setStatus] = useState('Disconnected');
   const [error, setError] = useState(null);
 
@@ -29,7 +28,6 @@ function TankRTCComponent() {
       videoHeight: 64,
       videoQuality: 0.8,
       audioVolume: 1.0,
-      positionUpdateInterval: 1000,
       maxHearingRange: 50.0
     });
 
@@ -183,14 +181,6 @@ function TankRTCComponent() {
     }
   };
 
-  const handlePositionChange = (axis, value) => {
-    const newPosition = { ...position, [axis]: parseFloat(value) };
-    setPosition(newPosition);
-    if (tankRTCRef.current) {
-      tankRTCRef.current.setPosition(newPosition.x, newPosition.z);
-    }
-  };
-
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
       <h1>Tank RTC - React Integration Example</h1>
@@ -300,27 +290,6 @@ function TankRTCComponent() {
           >
             Stop Viewing Video
           </button>
-        </div>
-
-        <div>
-          <label style={{ marginRight: '10px' }}>
-            X:
-            <input
-              type="number"
-              value={position.x}
-              onChange={(e) => handlePositionChange('x', e.target.value)}
-              style={{ width: '80px', margin: '0 5px' }}
-            />
-          </label>
-          <label>
-            Z:
-            <input
-              type="number"
-              value={position.z}
-              onChange={(e) => handlePositionChange('z', e.target.value)}
-              style={{ width: '80px', margin: '0 5px' }}
-            />
-          </label>
         </div>
       </div>
 
