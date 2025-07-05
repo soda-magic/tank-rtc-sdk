@@ -217,10 +217,8 @@ class TankRTC {
 
       dataChannel.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) {
-          console.log("data-0");
           this.handleIncomingVideoMessage(event.data);
         } else if (event.data instanceof Blob) {
-          console.log("data-1");
           // Firefox sends Blob, convert to ArrayBuffer
           const reader = new FileReader();
           reader.onload = () => {

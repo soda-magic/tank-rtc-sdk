@@ -1,6 +1,7 @@
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import terser from '@rollup/plugin-terser';
+import strip from '@rollup/plugin-strip';
 
 export default [
   // ES6 Module build
@@ -17,7 +18,8 @@ export default [
     ],
     external: []
   },
-  // UMD build (minified)
+
+  // UMD build (minified, with logs stripped)
   {
     input: 'src/index.js',
     output: {
@@ -29,10 +31,16 @@ export default [
     plugins: [
       nodeResolve(),
       commonjs(),
+      strip({
+        include: '**/*.(js|ts)',
+        functions: ['console.*', 'assert.*'],
+        debugger: true
+      }),
       terser()
     ],
     external: []
   },
+
   // UMD build (unminified for development)
   {
     input: 'src/index.js',
